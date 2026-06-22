@@ -1,6 +1,5 @@
 import os
 import groq
-import openai
 from dotenv import load_dotenv
 from groundx import GroundX, Document
 from mcp.server.fastmcp import FastMCP
@@ -23,16 +22,16 @@ class SearchResponse(BaseModel):
     result: str
 
 class SearchConfig(BaseModel):
-    openai_api_key: str = Field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
+    groq_api_key: str = Field(default_factory=lambda: os.getenv("GROQ_API_KEY"))
     groundx_api_key: str = Field(default_factory=lambda: os.getenv("GROUNDX_API_KEY"))
-    completion_model: str = "gpt-4o"
+    completion_model: str = "llama-3.3-70b-versatile"  # or "mixtral-8x7b-32768", "gemma2-9b-it", etc.
     bucket_id: int = Field(default_factory=lambda: os.getenv("BUCKET_ID"))
 
 
 @mcp.tool()
 def process_search_query(query: str, config: Optional[SearchConfig] = None) -> SearchResponse:
     """
-    Process a search query using GroundX and OpenAI.
+    Process a search query using GroundX and Groq.
     
     Args:
         query: The search query string
@@ -45,8 +44,8 @@ def process_search_query(query: str, config: Optional[SearchConfig] = None) -> S
         config = SearchConfig()
 
     # Initialize clients
-    client = GroundX(api_key=config.groundx_api_key)
-    openai.api_key = config.openai_api_key
+    groundx_client = GroundX(api_key=config.groundx_api_key)
+    groq_client = groq.Groq(api_key=config.groq_api_key)
 
     # System instruction for the AI
     instruction = """`You are a highly knowledgeable assistant. Your primary role is to assist developers by answering questions related to documents they have uploaded and that have been processed by the GroundX proprietary ingestion pipeline. This pipeline creates semantic objects and is known for delivering the highest accuracy in RAG retrievals on the market.
@@ -82,14 +81,14 @@ Handling Specific Scenarios:
 	3.	General Questions: When asked general questions, please rely on your general knowledge of the world.`"""
 
     # Perform content search
-    content_response = client.search.content(
+    content_response = groundx_client.search.content(
         id=config.bucket_id,
         query=query,
     )
     results = content_response.search
 
-    # Generate completion using OpenAI
-    completion = openai.chat.completions.create(
+    # Generate completion using Groq
+    completion = groq_client.chat.completions.create(
         model=config.completion_model,
         messages=[
             {
